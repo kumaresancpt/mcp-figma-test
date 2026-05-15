@@ -5,89 +5,56 @@ using backend.Models;
 
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-    {
-    }
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<User> Users { get; set; }
     public DbSet<Session> Sessions { get; set; }
-    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    public DbSet<Visitor> Visitors { get; set; }
+    public DbSet<Badge> Badges { get; set; }
+    public DbSet<Host> Hosts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // User table configuration
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Username).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PasswordHash).IsRequired();
-            entity.Property(e => e.Role).IsRequired().HasConversion<string>();
-            entity.Property(e => e.IsActive).IsRequired();
-            entity.Property(e => e.FailedAttempts).IsRequired();
-            entity.Property(e => e.CreatedAt).IsRequired();
-            entity.Property(e => e.UpdatedAt).IsRequired();
+        modelBuilder.Entity<User>().Property(u => u.Role).HasConversion<string>();
+        modelBuilder.Entity<AuditLog>().Property(a => a.Action).HasConversion<string>();
+        modelBuilder.Entity<Visitor>().Property(v => v.Status).HasConversion<string>();
+        modelBuilder.Entity<Badge>().Property(b => b.BadgeType).HasConversion<string>();
 
-            entity.HasIndex(e => e.Username).IsUnique();
-            entity.HasIndex(e => e.Email).IsUnique();
+        modelBuilder.Entity<User>().HasIndex(u => u.Username).IsUnique();
+        modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
-            // Relationships
-            entity.HasMany(e => e.Sessions)
-                .WithOne(s => s.User)
-                .HasForeignKey(s => s.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Session>()
+            .HasOne(s => s.User)
+            .WithMany(u => u.Sessions)
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasMany(e => e.PasswordResetTokens)
-                .WithOne(p => p.User)
-                .HasForeignKey(p => p.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<AuditLog>()
+            .HasOne(a => a.User)
+            .WithMany(u => u.AuditLogs)
+            .HasForeignKey(a => a.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasMany(e => e.AuditLogs)
-                .WithOne(a => a.User)
-                .HasForeignKey(a => a.UserId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasOne(p => p.User)
+            .WithMany(u => u.PasswordResetTokens)
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        // Session table configuration
-        modelBuilder.Entity<Session>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.UserId).IsRequired();
-            entity.Property(e => e.TokenHash).IsRequired();
-            entity.Property(e => e.IsPersistent).IsRequired();
-            entity.Property(e => e.ExpiresAt).IsRequired();
-            entity.Property(e => e.CreatedAt).IsRequired();
+        modelBuilder.Entity<Visitor>()
+            .HasOne(v => v.Host)
+            .WithMany(h => h.Visitors)
+            .HasForeignKey(v => v.HostId)
+            .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(e => e.TokenHash).IsUnique();
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => e.ExpiresAt);
-        });
-
-        // PasswordResetToken table configuration
-        modelBuilder.Entity<PasswordResetToken>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.UserId).IsRequired();
-            entity.Property(e => e.TokenHash).IsRequired();
-            entity.Property(e => e.ExpiresAt).IsRequired();
-            entity.Property(e => e.CreatedAt).IsRequired();
-
-            entity.HasIndex(e => e.TokenHash).IsUnique();
-            entity.HasIndex(e => e.UserId);
-        });
-
-        // AuditLog table configuration
-        modelBuilder.Entity<AuditLog>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Action).IsRequired().HasConversion<string>();
-            entity.Property(e => e.Timestamp).IsRequired();
-
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => e.Timestamp);
-        });
+        modelBuilder.Entity<Badge>()
+            .HasOne(b => b.Visitor)
+            .WithOne(v => v.Badge)
+            .HasForeignKey<Badge>(b => b.VisitorId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
