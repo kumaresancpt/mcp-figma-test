@@ -43,7 +43,9 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.Zero,
+        RoleClaimType = "role",
+        NameClaimType = "sub"
     };
     options.Events = new JwtBearerEvents
     {
@@ -73,6 +75,8 @@ builder.Services.AddCors(options =>
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IVisitorService, VisitorService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddLogging();
 
 var app = builder.Build();
@@ -98,22 +102,48 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.EnsureCreated();
-    
-    // Seed admin user if not exists
-    if (!dbContext.Users.Any(u => u.Username == "admin"))
+
+    var demoUsers = new[]
     {
-        var adminUser = new User
+        new { Username = "admin",         Email = "admin@example.com",         Password = "Admin@123!",    Role = UserRole.ROLE_ADMIN },
+        new { Username = "receptionist",  Email = "recep@example.com",         Password = "Recep@123!",    Role = UserRole.ROLE_RECEPTIONIST },
+        new { Username = "security",      Email = "security@example.com",      Password = "Security@123!", Role = UserRole.ROLE_SECURITY_GUARD },
+    };
+
+    foreach (var demo in demoUsers)
+    {
+        var existing = dbContext.Users.FirstOrDefault(u => u.Username == demo.Username);
+        if (existing == null)
         {
-            Id = Guid.NewGuid(),
-            Username = "admin",
-            Email = "admin@example.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123", 12),
-            Role = UserRole.ROLE_ADMIN,
-            IsActive = true,
-            FailedAttempts = 0,
-            CreatedAt = DateTime.UtcNow
-        };
-        dbContext.Users.Add(adminUser);
+            dbContext.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                Username = demo.Username,
+                Email = demo.Email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(demo.Password, 12),
+                Role = demo.Role,
+                IsActive = true,
+                FailedAttempts = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            existing.PasswordHash = BCrypt.Net.BCrypt.HashPassword(demo.Password, 12);
+            existing.FailedAttempts = 0;
+            existing.LockedUntil = null;
+        }
+    }
+    dbContext.SaveChanges();
+
+    // Seed demo hosts
+    if (!dbContext.Hosts.Any())
+    {
+        dbContext.Hosts.AddRange(
+            new backend.Models.Host { Id = Guid.NewGuid(), Name = "Arun Kumar", Department = "Engineering", Email = "arun@example.com", CreatedAt = DateTime.UtcNow },
+            new backend.Models.Host { Id = Guid.NewGuid(), Name = "Priya Singh", Department = "HR", Email = "priya@example.com", CreatedAt = DateTime.UtcNow },
+            new backend.Models.Host { Id = Guid.NewGuid(), Name = "Ravi Shankar", Department = "Finance", Email = "ravi@example.com", CreatedAt = DateTime.UtcNow }
+        );
         dbContext.SaveChanges();
     }
 }
