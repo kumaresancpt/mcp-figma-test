@@ -5,20 +5,18 @@ using System.Text;
 using backend.Data;
 using backend.Services;
 using backend.Models;
+using Backend.Services.Visitor;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// JWT Configuration
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
 var issuer = jwtSettings["Issuer"];
@@ -58,7 +56,6 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// CORS
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "*" };
 builder.Services.AddCors(options =>
 {
@@ -71,13 +68,12 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IVisitorService, VisitorService>();
 builder.Services.AddLogging();
 
 var app = builder.Build();
 
-// Swagger enabled in ALL environments - unconditional
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -88,18 +84,15 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }))
     .WithName("Health")
     .WithOpenApi();
 
-// Seed database with demo data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.EnsureCreated();
     
-    // Seed admin user if not exists
     if (!dbContext.Users.Any(u => u.Username == "admin"))
     {
         var adminUser = new User

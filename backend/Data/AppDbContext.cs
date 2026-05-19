@@ -2,6 +2,7 @@ namespace backend.Data;
 
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
+using Backend.Models.Visitor;
 
 public class AppDbContext : DbContext
 {
@@ -13,12 +14,12 @@ public class AppDbContext : DbContext
     public DbSet<Session> Sessions { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<Visitor> Visitors { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // User table configuration
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -34,7 +35,6 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.Email).IsUnique();
 
-            // Relationships
             entity.HasMany(e => e.Sessions)
                 .WithOne(s => s.User)
                 .HasForeignKey(s => s.UserId)
@@ -51,7 +51,6 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // Session table configuration
         modelBuilder.Entity<Session>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -66,7 +65,6 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.ExpiresAt);
         });
 
-        // PasswordResetToken table configuration
         modelBuilder.Entity<PasswordResetToken>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -79,7 +77,6 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.UserId);
         });
 
-        // AuditLog table configuration
         modelBuilder.Entity<AuditLog>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -88,6 +85,29 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.Timestamp);
+
+        modelBuilder.Entity<Visitor>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Company).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Host).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Purpose).HasMaxLength(500);
+            entity.Property(e => e.CheckInTime).IsRequired();
+            entity.Property(e => e.CheckOutTime);
+            entity.Property(e => e.Status).IsRequired().HasConversion<string>();
+            entity.Property(e => e.Badge).IsRequired().HasConversion<string>();
+            entity.Property(e => e.VisitorImage).HasMaxLength(500);
+            entity.Property(e => e.PhoneNumber).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+
+            entity.HasIndex(e => e.CheckInTime);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.Host);
+        });
         });
     }
 }

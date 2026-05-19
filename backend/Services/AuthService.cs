@@ -26,7 +26,6 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Login attempt for user: {Username} from IP: {IpAddress}", request.Username, ipAddress);
 
-        // Find user by username
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username);
 
@@ -37,7 +36,6 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid username or password");
         }
 
-        // Check if account is locked
         if (user.LockedUntil.HasValue && user.LockedUntil > DateTime.UtcNow)
         {
             _logger.LogWarning("Login failed: Account locked - {Username}", request.Username);
@@ -45,7 +43,6 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Account locked due to too many failed attempts. Try again later.");
         }
 
-        // Check if account is active
         if (!user.IsActive)
         {
             _logger.LogWarning("Login failed: Account inactive - {Username}", request.Username);
@@ -53,7 +50,6 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Account is inactive");
         }
 
-        // Check role match
         if (!user.Role.ToString().Equals(request.Role, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning("Login failed: Role mismatch - {Username}, Expected: {ExpectedRole}, Got: {ProvidedRole}", 
@@ -62,12 +58,10 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Role mismatch");
         }
 
-        // Verify password
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
             _logger.LogWarning("Login failed: Invalid password - {Username}", request.Username);
             
-            // Increment failed attempts
             user.FailedAttempts++;
             if (user.FailedAttempts >= 5)
             {
@@ -80,16 +74,13 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid username or password");
         }
 
-        // Reset failed attempts and unlock account
         user.FailedAttempts = 0;
         user.LockedUntil = null;
         user.UpdatedAt = DateTime.UtcNow;
 
-        // Generate tokens
         var accessToken = GenerateJwtToken(user);
         var tokenHash = HashToken(accessToken);
 
-        // Create session
         var session = new Session
         {
             Id = Guid.NewGuid(),
@@ -159,7 +150,6 @@ public class AuthService : IAuthService
 
         if (user != null)
         {
-            // Generate reset token
             var resetToken = GenerateRandomToken();
             var tokenHash = HashToken(resetToken);
 
@@ -175,16 +165,12 @@ public class AuthService : IAuthService
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Password reset token generated for user: {UserId}", user.Id);
-            // In production, send email with reset token here
-            // For now, just log it
             _logger.LogInformation("Reset token (demo): {ResetToken}", resetToken);
         }
         else
         {
             _logger.LogInformation("Password reset requested for non-existent user: {UsernameOrEmail}", usernameOrEmail);
         }
-
-        // Always return success to prevent user enumeration
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
@@ -208,15 +194,12 @@ public class AuthService : IAuthService
             throw new KeyNotFoundException("User not found");
         }
 
-        // Hash new password
         var newPasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword, 12);
         user.PasswordHash = newPasswordHash;
         user.UpdatedAt = DateTime.UtcNow;
 
-        // Mark token as used
         resetToken.UsedAt = DateTime.UtcNow;
 
-        // Revoke all active sessions
         var activeSessions = await _context.Sessions
             .Where(s => s.UserId == user.Id && s.RevokedAt == null)
             .ToListAsync();
@@ -236,7 +219,6 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Signup request for user: {Username}", request.Username);
 
-        // Validate admin role
         var admin = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == Guid.Parse(adminUserId));
 
@@ -246,27 +228,23 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Only admin can create new users");
         }
 
-        // Check username uniqueness
         if (await _context.Users.AnyAsync(u => u.Username == request.Username))
         {
             _logger.LogWarning("Signup failed: Username already exists - {Username}", request.Username);
             throw new InvalidOperationException("Username already exists");
         }
 
-        // Check email uniqueness
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
         {
             _logger.LogWarning("Signup failed: Email already exists - {Email}", request.Email);
             throw new InvalidOperationException("Email already exists");
         }
 
-        // Parse and validate role
         if (!Enum.TryParse<UserRole>(request.Role, true, out var userRole))
         {
             throw new InvalidOperationException("Invalid role specified");
         }
 
-        // Hash password
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, 12);
 
         var newUser = new User
@@ -326,8 +304,8 @@ public class AuthService : IAuthService
 
     private string GenerateJwtToken(User user)
     {
-        var secretKey = _configuration["JwtSettings:SecretKey"];
-        var issuer = _configuration["JwtSettings:Issuer"];
+        var secretKey = _configuration["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT secret key not configured");
+        var issuer = _configuration["JwtSettings:Issuer"] ?? throw new InvalidOperationException("JWT issuer not configured");
         var expiryMinutes = int.Parse(_configuration["JwtSettings:ExpiryMinutes"] ?? "60");
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
